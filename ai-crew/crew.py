@@ -3,6 +3,7 @@ import os
 import requests
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool
+from crewai_tools import FileWriteTool
 from langchain_openai import ChatOpenAI
 
 
@@ -57,6 +58,41 @@ llm = ChatOpenAI(
 )
 
 
+write_arch_tool = FileWriteTool(file_path='../docs/architecture_spec.md')
+write_design_tool = FileWriteTool(file_path='../docs/design_system.md')
+
+
+tech_lead = Agent(
+    role="AR Systems Architect",
+    goal=(
+        "Design the Unity AR Foundation architecture and JSON schemas for "
+        "IKEA furniture assembly."
+    ),
+    backstory=(
+        "You are a senior Mixed Reality developer who writes pristine, "
+        "technical markdown documentation."
+    ),
+    verbose=True,
+    llm=llm,
+    tools=[write_arch_tool],
+)
+
+
+spatial_designer = Agent(
+    role="Spatial UI/UX Designer",
+    goal=(
+        "Design the holographic interfaces, 3D arrow logic, and user flows."
+    ),
+    backstory=(
+        "You are an expert in Apple Vision Pro and Meta Quest spatial design "
+        "patterns."
+    ),
+    verbose=True,
+    llm=llm,
+    tools=[write_design_tool],
+)
+
+
 pm_agent = Agent(
     role="Product Manager",
     goal=(
@@ -74,17 +110,41 @@ pm_agent = Agent(
 )
 
 
-planning_task = Task(
+task_1_architecture = Task(
     description=(
-        "Use your `create_linear_ticket` tool to create exactly 3 Linear "
-        "tickets for Phase 1 of our open-source AR guide for assembling an "
-        "IKEA LACK table. The tickets must be:\n"
-        "1. Setup the Unity AR Foundation project structure.\n"
-        "2. Create the JSON schema for the assembly instructions.\n"
-        "3. Build a basic C# script to parse that JSON.\n\n"
-        "Each ticket description must include detailed acceptance criteria "
-        "so an engineer can pick it up and execute without further "
-        "clarification."
+        "Draft the system architecture for the DYAI LACK Table AR App. "
+        "Include the exact JSON schema for the assembly steps and the "
+        "required Unity packages. Save the output using your file write tool."
+    ),
+    expected_output=(
+        "A complete architecture specification in markdown, including the "
+        "JSON schema and Unity package list, written to "
+        "../docs/architecture_spec.md."
+    ),
+    agent=tech_lead,
+)
+
+
+task_2_design = Task(
+    description=(
+        "Based on the LACK table AR concept, design the visual states for "
+        "the 3D directional arrows and the holographic 'ghost' furniture "
+        "pieces. Save the output using your file write tool."
+    ),
+    expected_output=(
+        "A markdown design system document covering arrow visual states and "
+        "holographic ghost furniture, written to ../docs/design_system.md."
+    ),
+    agent=spatial_designer,
+)
+
+
+task_3_planning = Task(
+    description=(
+        "Review the project goals. Use your tool to create exactly 3 Linear "
+        "tickets for Phase 1: 1. Setup Unity AR Foundation, 2. Implement the "
+        "JSON parser, 3. Create the 3D Bezier Arrow Shader. Include detailed "
+        "acceptance criteria in each ticket."
     ),
     expected_output=(
         "Confirmation that all 3 Linear tickets have been created, including "
@@ -95,8 +155,8 @@ planning_task = Task(
 
 
 crew = Crew(
-    agents=[pm_agent],
-    tasks=[planning_task],
+    agents=[tech_lead, spatial_designer, pm_agent],
+    tasks=[task_1_architecture, task_2_design, task_3_planning],
     process=Process.sequential,
 )
 
