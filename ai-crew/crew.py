@@ -1,11 +1,9 @@
 import os
 
 import requests
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool
-from dotenv import load_dotenv
-
-load_dotenv()
+from langchain_openai import ChatOpenAI
 
 
 @tool("create_linear_ticket")
@@ -19,8 +17,8 @@ def create_linear_ticket(title: str, description: str) -> str:
     Returns:
         A status string describing the result of the API call.
     """
-    api_key = os.environ["LINEAR_API_KEY"]
-    team_id = os.environ["LINEAR_TEAM_ID"]
+    api_key = os.getenv("LINEAR_API_KEY")
+    team_id = os.getenv("LINEAR_TEAM_ID")
 
     query = """
     mutation IssueCreate($title: String!, $description: String!, $teamId: String!) {
@@ -45,67 +43,61 @@ def create_linear_ticket(title: str, description: str) -> str:
                 "teamId": team_id,
             },
         },
-        timeout=30,
     )
-    response.raise_for_status()
-    payload = response.json()
 
-    if payload.get("errors"):
-        return f"Linear API error: {payload['errors']}"
-
-    result = payload["data"]["issueCreate"]
-    if not result["success"]:
-        return "Linear ticket creation failed."
-
-    issue = result["issue"]
-    return f"Created Linear ticket {issue['identifier']}: {issue['url']}"
+    if response.status_code == 200:
+        return f"Successfully created Linear ticket: {title}"
+    return response.text
 
 
-product_manager = Agent(
+llm = ChatOpenAI(
+    model="openai/gpt-4o",
+    openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url="https://openrouter.ai/api/v1",
+)
+
+
+pm_agent = Agent(
     role="Product Manager",
-    goal="Translate technical architecture into well-scoped Linear tickets that the team can execute on.",
+    goal=(
+        "Break down an AR application architecture into actionable Linear "
+        "tickets."
+    ),
     backstory=(
         "You are a seasoned product manager for the DYAI project. You take "
-        "architectural designs from the Tech Lead and break them down into "
-        "clear, actionable engineering tickets in Linear."
+        "architectural designs and translate them into clear, actionable "
+        "engineering tickets in Linear with detailed acceptance criteria."
     ),
+    verbose=True,
+    llm=llm,
     tools=[create_linear_ticket],
-    allow_delegation=False,
-    verbose=True,
 )
 
-tech_lead = Agent(
-    role="Tech Lead",
-    goal="Define the Unity AR Foundation architecture for the DYAI LACK Table AR App.",
-    backstory=(
-        "You are the Tech Lead for DYAI, an expert in Unity and AR Foundation. "
-        "You design robust, phased architectures for AR experiences and document "
-        "them clearly so the rest of the team can build against them."
-    ),
-    allow_delegation=False,
-    verbose=True,
-)
 
-architecture_task = Task(
+planning_task = Task(
     description=(
-        "Draft the Phase 1 Architecture for the DYAI LACK Table AR App and save "
-        "it as a markdown file in /docs/architecture_spec.md. Cover Unity AR "
-        "Foundation setup, plane/image tracking strategy, scene composition, and "
-        "the integration points the rest of the team will need."
+        "Use your `create_linear_ticket` tool to create exactly 3 Linear "
+        "tickets for Phase 1 of our open-source AR guide for assembling an "
+        "IKEA LACK table. The tickets must be:\n"
+        "1. Setup the Unity AR Foundation project structure.\n"
+        "2. Create the JSON schema for the assembly instructions.\n"
+        "3. Build a basic C# script to parse that JSON.\n\n"
+        "Each ticket description must include detailed acceptance criteria "
+        "so an engineer can pick it up and execute without further "
+        "clarification."
     ),
     expected_output=(
-        "A complete Phase 1 architecture specification written to "
-        "/docs/architecture_spec.md."
+        "Confirmation that all 3 Linear tickets have been created, including "
+        "the title of each ticket."
     ),
-    agent=tech_lead,
-    output_file="/docs/architecture_spec.md",
+    agent=pm_agent,
 )
 
+
 crew = Crew(
-    agents=[tech_lead, product_manager],
-    tasks=[architecture_task],
+    agents=[pm_agent],
+    tasks=[planning_task],
     process=Process.sequential,
-    verbose=True,
 )
 
 
