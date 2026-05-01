@@ -2,7 +2,9 @@ services:
   dyai-crew:
     build:
       context: ./ai-crew
-    env_file:
-      - ./.env
+    container_name: dyai-crew-container
     volumes:
       - ./docs:/docs
+      - ./ai-crew:/app
+    env_file:
+      - ./ai-crew/.env
