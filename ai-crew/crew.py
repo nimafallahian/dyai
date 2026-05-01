@@ -100,9 +100,10 @@ pm_agent = Agent(
         "tickets."
     ),
     backstory=(
-        "You are a seasoned product manager for the DYAI project. You take "
-        "architectural designs and translate them into clear, actionable "
-        "engineering tickets in Linear with detailed acceptance criteria."
+        "You are a meticulous Product Manager. You analyze architectural "
+        "documents and automatically determine how many engineering tasks "
+        "are required. You break complex systems down into perfectly scoped "
+        "technical tickets."
     ),
     verbose=True,
     llm=llm,
@@ -141,16 +142,20 @@ task_2_design = Task(
 
 task_3_planning = Task(
     description=(
-        "Review the project goals. Use your tool to create exactly 3 Linear "
-        "tickets for Phase 1: 1. Setup Unity AR Foundation, 2. Implement the "
-        "JSON parser, 3. Create the 3D Bezier Arrow Shader. Include detailed "
-        "acceptance criteria in each ticket."
+        "Review the system architecture provided by the Tech Lead. Determine "
+        "the logical sequence of engineering tasks needed to build Phase 1 "
+        "of this AR app. Use your Linear tool to dynamically create a ticket "
+        "for each distinct engineering task you identify. Do not stop until "
+        "every part of the architecture is covered by a ticket. Include "
+        "detailed acceptance criteria in each ticket based on the "
+        "architecture specs."
     ),
     expected_output=(
-        "Confirmation that all 3 Linear tickets have been created, including "
-        "the title of each ticket."
+        "A summary list of all the Linear tickets that were dynamically "
+        "created."
     ),
     agent=pm_agent,
+    context=[task_1_architecture],
 )
 
 
