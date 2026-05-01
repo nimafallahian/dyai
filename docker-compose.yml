@@ -3,6 +3,6 @@ services:
     build:
       context: ./ai-crew
     env_file:
-      - ./ai-crew/.env
+      - ./.env
     volumes:
       - ./docs:/docs
