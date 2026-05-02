@@ -1,65 +1,78 @@
 import os
 
 import requests
-from crewai import Agent, Task, Crew, Process
-from crewai.tools import tool
-from crewai_tools import FileWriteTool
-from langchain_openai import ChatOpenAI
+from crewai import Agent, Task, Crew, Process, LLM
+from crewai.tools import BaseTool
+from crewai_tools import FileWriterTool
+from pydantic import BaseModel, Field
 
 
-@tool("create_linear_ticket")
-def create_linear_ticket(title: str, description: str) -> str:
-    """Create a new issue in Linear for the configured team.
+class CreateLinearTicketArgs(BaseModel):
+    ticket_title: str = Field(..., description="The title of the Linear issue.")
+    ticket_description: str = Field(..., description="The markdown body / description for the issue.")
 
-    Args:
-        title: The title of the Linear issue.
-        description: The markdown body / description for the issue.
 
-    Returns:
-        A status string describing the result of the API call.
-    """
-    api_key = os.getenv("LINEAR_API_KEY")
-    team_id = os.getenv("LINEAR_TEAM_ID")
+class CreateLinearTicketTool(BaseTool):
+    name: str = "create_linear_ticket"
+    description: str = "Create a new issue in Linear for the configured team."
+    args_schema: type[BaseModel] = CreateLinearTicketArgs
 
-    query = """
-    mutation IssueCreate($title: String!, $description: String!, $teamId: String!) {
-      issueCreate(input: { title: $title, description: $description, teamId: $teamId }) {
-        success
-        issue { id identifier url title }
-      }
-    }
-    """
+    def _run(self, ticket_title: str, ticket_description: str) -> str:
+        api_key = os.getenv("LINEAR_API_KEY")
+        team_id = os.getenv("LINEAR_TEAM_ID")
 
-    response = requests.post(
-        "https://api.linear.app/graphql",
-        headers={
-            "Authorization": api_key,
-            "Content-Type": "application/json",
-        },
-        json={
-            "query": query,
-            "variables": {
-                "title": title,
-                "description": description,
-                "teamId": team_id,
+        query = """
+        mutation IssueCreate($title: String!, $description: String!, $teamId: String!) {
+          issueCreate(input: { title: $title, description: $description, teamId: $teamId }) {
+            success
+            issue { id identifier url title }
+          }
+        }
+        """
+
+        response = requests.post(
+            "https://api.linear.app/graphql",
+            headers={
+                "Authorization": api_key,
+                "Content-Type": "application/json",
             },
-        },
-    )
+            json={
+                "query": query,
+                "variables": {
+                    "title": ticket_title,
+                    "description": ticket_description,
+                    "teamId": team_id,
+                },
+            },
+        )
 
-    if response.status_code == 200:
-        return f"Successfully created Linear ticket: {title}"
-    return response.text
+        if response.status_code != 200:
+            return f"Linear HTTP {response.status_code}: {response.text}"
+
+        payload = response.json()
+        if payload.get("errors"):
+            return f"Linear GraphQL error: {payload['errors']}"
+
+        result = (payload.get("data") or {}).get("issueCreate") or {}
+        if not result.get("success"):
+            return f"Linear ticket creation failed: {payload}"
+
+        issue = result.get("issue") or {}
+        return f"Created Linear ticket {issue.get('identifier', '?')}: {issue.get('url', ticket_title)}"
 
 
-llm = ChatOpenAI(
-    model="openai/gpt-4o",
-    openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+create_linear_ticket = CreateLinearTicketTool()
+
+
+llm = LLM(
+    model="openrouter/openai/gpt-4o",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url="https://openrouter.ai/api/v1",
 )
 
 
-write_arch_tool = FileWriteTool(file_path='../docs/architecture_spec.md')
-write_design_tool = FileWriteTool(file_path='../docs/design_system.md')
+write_arch_tool = FileWriterTool(file_path='../docs/architecture_spec.md')
+write_design_tool = FileWriterTool(file_path='../docs/design_system.md')
 
 
 tech_lead = Agent(
